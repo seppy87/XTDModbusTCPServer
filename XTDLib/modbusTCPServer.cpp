@@ -83,6 +83,23 @@ void xtd::modbusTCPServer::setupCallback(unsigned short functionCode, ModbusCall
 	this->FunctionCallbacks.insert(std::make_pair(functionCode, callback));
 }
 
+void xtd::modbusTCPServer::setupCustomFunctionCodes(unsigned short functionCode, ModbusCustomCallback callback)
+{
+	switch (functionCode) {
+	case 1:
+	case 2:
+	case 3:
+	case 4:
+	case 5:
+	case 6:
+	case 15:
+	case 16:
+		throw std::exception("Cannot specify custom Function Codes for existing Codes!");
+	default:
+		this->CustomFunctionCallbacks.insert(std::make_pair(functionCode, callback));
+	}
+}
+
 void xtd::modbusTCPServer::reply()
 {
 	switch (this->header.FunctionCode) {
@@ -178,23 +195,41 @@ void xtd::modbusTCPServer::preparePacket(char buffer[], int size)
 
 void xtd::modbusTCPServer::processOrder()
 {
+	auto StartAddress = (xtd::uintCast<16>(this->header.data[0], this->header.data[1]).asValue<uint16_t>());
+	auto size = (xtd::uintCast<16>(this->header.data[2], this->header.data[3]).asValue<uint16_t>());
 	switch (this->header.FunctionCode)
 	{
 	case 1: // Read Coils;
-
+	{
+		
+		if (this->FunctionCallbacks.count(1))
+		{
+			this->FunctionCallbacks[1](StartAddress, size, std::nullopt);
+		}
+		std::cout << "Read Coils\n";
+	}
 		break;
 	case 2: // Read Discrete Inputs
+		if (this->FunctionCallbacks.count(2))
+			this->FunctionCallbacks[2](StartAddress, size, std::nullopt);
+		std::cout << "Read Discrete Inputs\n";
 		break;
 	case 3:
 		if (this->FunctionCallbacks.count(3))
-			this->FunctionCallbacks[3](this->header.data[1], this->header.data[3], std::nullopt);
+			this->FunctionCallbacks[3](StartAddress, size, std::nullopt);
+		std::cout << "Read Holding Registers\n";
 		this->reply();
 		break;
 	case 4:	//Read Input Registers
+		if (this->FunctionCallbacks.count(4))
+			this->FunctionCallbacks[4](StartAddress, size, std::nullopt);
+		std::cout << "Read Input Registers\n";
+		this->reply();
 		break;
 	case 5:	//Write Single coil
 		break;
 	case 6:		//Write Single Register
+		std::cout << "Write single Register\n";
 		break;
 	case 15:	//write multiple coils
 		break;
@@ -203,7 +238,14 @@ void xtd::modbusTCPServer::processOrder()
 		if (this->FunctionCallbacks.count(16))
 			this->FunctionCallbacks[16](this->header.data[1], this->header.data[3], this->header.data);
 		break;
-
+	default:
+		std::cout << "Checking custom Function Codes\n";
+		if (this->CustomFunctionCallbacks.count(this->header.FunctionCode)) {
+			this->CustomFunctionCallbacks[this->header.FunctionCode]([=](const std::vector<unsigned char> & data) {this->customReply(data); }, StartAddress, size, this->header.data);
+		}
+		else {
+			std::cout << "No Custom Function specified for the Function Code " << (unsigned int)this->header.FunctionCode << '\n';
+		}
 	}
 }
 
